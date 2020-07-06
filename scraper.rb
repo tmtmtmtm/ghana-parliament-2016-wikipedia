@@ -10,13 +10,52 @@ class MembersPage < Scraped::HTML
   decorator WikidataIdsDecorator::Links
 
   field :members do
-    members_table.xpath('.//tr[td[2]]').map { |tr| fragment(tr => MemberRow).to_h }
+    members_table.xpath('.//tr[td[2]]').map do |tr|
+      data = fragment(tr => MemberRow).to_h
+      data.merge(party: party_lookup.fetch(data[:partyLabel])[:id])
+    end
+  end
+
+  field :parties do
+    party_table.xpath('.//tr[.//a]').map { |tr| fragment(tr => PartyRow).to_h }
   end
 
   private
 
   def members_table
     noko.xpath('//table[.//th[contains(.,"Elected MP")]]')
+  end
+
+  def party_table
+    noko.xpath('//table[.//td[contains(.,"Affiliation")]]').first
+  end
+
+  def party_lookup
+    @party_lookup ||= parties.map { |party| [party[:shortname], party] }.to_h
+  end
+end
+
+class PartyRow < Scraped::HTML
+  field :id do
+    tds[0].css('a/@wikidata').map(&:text).first
+  end
+
+  field :shortname do
+    name_parts.captures.last
+  end
+
+  field :name do
+    name_parts.captures.first
+  end
+
+  private
+
+  def tds
+    noko.css('td')
+  end
+
+  def name_parts
+    @name_parts ||= tds[0].css('a').map(&:text).map(&:tidy).first.match(/(.*?) \((\w+)\)/)
   end
 end
 
